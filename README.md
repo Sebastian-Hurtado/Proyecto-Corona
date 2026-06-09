@@ -478,20 +478,4 @@ cd web
 npm.cmd run build
 ```
 
-## Limitaciones conocidas
 
-- la libreria `xlsx` tiene una vulnerabilidad reportada por `npm audit` y hoy no trae fix oficial disponible
-- no hay autenticacion
-- el motor usa reglas y no aprendizaje automatico
-- la informacion de antropometria aun es de referencia y no participa como filtro duro en el ranking
-
-## Idea de evolucion
-
-Una siguiente version podria agregar:
-
-- filtros por area
-- reglas de seguridad y antropometria
-- historial de multiples evaluaciones por trabajador
-- explicacion mas detallada del score
-- metricas de productividad reales
-- ML clasico o modelos predictivos cuando exista mas historial limpio
