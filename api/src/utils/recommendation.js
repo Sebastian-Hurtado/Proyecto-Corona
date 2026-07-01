@@ -42,6 +42,7 @@ function scoreWorkerAgainstRole(requirements, skillMap, roleResolved = true) {
       strengths: [],
       gaps: [],
       criticalFailures: [],
+      skillComparisons: [],
     };
   }
 
@@ -50,6 +51,7 @@ function scoreWorkerAgainstRole(requirements, skillMap, roleResolved = true) {
   const strengths = [];
   const gaps = [];
   const criticalFailures = [];
+  const skillComparisons = [];
 
   for (const requirement of requirements) {
     const workerSkill = skillMap[requirement.skillKey] || {};
@@ -68,6 +70,14 @@ function scoreWorkerAgainstRole(requirements, skillMap, roleResolved = true) {
       expectedLabel: requirement.desiredLabel,
       weight,
     };
+
+    skillComparisons.push({
+      ...detail,
+      expectedLevel: requirement.minLevel,
+      minLevel: requirement.minLevel,
+      maxLevel: requirement.maxLevel,
+      requirementKind: requirement.requirementKind,
+    });
 
     if (workerLevel < requirement.minLevel) {
       gaps.push({
@@ -106,6 +116,7 @@ function scoreWorkerAgainstRole(requirements, skillMap, roleResolved = true) {
     strengths: strengths.slice(0, 3),
     gaps: gaps.slice(0, 3),
     criticalFailures,
+    skillComparisons,
   };
 }
 

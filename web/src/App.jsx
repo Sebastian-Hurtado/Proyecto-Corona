@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   createRoleAlias,
+  deleteRoleAlias,
   getImportIssues,
   getRecommendations,
   getRoles,
@@ -16,6 +17,8 @@ const TABS = [
   "Homologaciones",
   "Recomendaciones",
 ];
+
+const RADAR_LEVELS = [1, 2, 3, 4, 5];
 
 function App() {
   const [activeTab, setActiveTab] = useState(TABS[0]);
@@ -66,6 +69,19 @@ function App() {
       .then(setRecommendationData)
       .catch((requestError) => setError(requestError.message));
   }, [selectedRoleId]);
+
+  useEffect(() => {
+    if (!message && !error) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+      setError("");
+    }, 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message, error]);
 
   async function handleFileUpload(event) {
     const file = event.target.files?.[0];
@@ -128,16 +144,38 @@ function App() {
     }
   }
 
+  async function handleDeleteAlias(alias) {
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await deleteRoleAlias(alias.id);
+      setMessage(`Homologacion deshecha para "${alias.source_name}".`);
+      await refreshBaseData();
+
+      if (lastImport?.batchId) {
+        const issuesPayload = await getImportIssues(lastImport.batchId);
+        setImportIssues(issuesPayload.issues);
+      }
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Corona Talent Prototype</p>
-          <h1>Cerebro Digital para talento operativo</h1>
-          <p className="hero-copy">
-            Consolida oficios, evaluaciones y brechas de habilidades para recomendar
-            el mejor perfil disponible en la linea One Piece.
+          <p className="eyebrow">
+            <span className="brand-wordmark">corona</span>
+            <span className="eyebrow-separator">|</span>
+            <span>Talento operativo</span>
           </p>
+          <h1>Cerebro Digital para talento operativo</h1>
+          <p className="hero-copy">Gestion centralizada de oficios</p>
         </div>
         <div className="hero-metrics">
           <Metric label="Oficios" value={rolesData.roles.length} />
@@ -278,6 +316,8 @@ function App() {
                     </div>
                   </article>
                 ))}
+
+                <RoleFitSummary matches={workerDetail.roleMatches || []} />
               </div>
             )}
           </Panel>
@@ -359,9 +399,18 @@ function App() {
               {rolesData.aliases.length === 0 && <EmptyState text="Aun no hay homologaciones guardadas." />}
               {rolesData.aliases.map((alias) => (
                 <div key={alias.id} className="issue-card">
-                  <div className="issue-topline">
+                  <div className="alias-active-row">
                     <strong>{alias.source_name}</strong>
-                    <Badge tone="success">{alias.role_name}</Badge>
+                    <div className="alias-active-actions">
+                      <Badge tone="success">{alias.role_name}</Badge>
+                      <button
+                        className="secondary-action danger"
+                        type="button"
+                        onClick={() => handleDeleteAlias(alias)}
+                      >
+                        Deshacer
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -420,25 +469,24 @@ function App() {
                     </Badge>
                   </div>
                   <p>Rol fuente: {item.sourceRoleName || "Sin rol fuente"}</p>
+                  {item.skillComparisons?.length > 0 && (
+                    <RadarChart comparisons={item.skillComparisons} />
+                  )}
                   <div className="recommendation-columns">
-                    <div>
-                      <h4>Fortalezas</h4>
-                      {item.strengths.length === 0 && <small>Sin fortalezas destacadas.</small>}
-                      {item.strengths.map((strength) => (
-                        <p key={strength.label}>
-                          {strength.label}: {strength.currentLevelText} vs {strength.expectedLabel}
-                        </p>
-                      ))}
-                    </div>
-                    <div>
-                      <h4>Brechas</h4>
-                      {item.gaps.length === 0 && <small>Sin brechas criticas.</small>}
-                      {item.gaps.map((gap) => (
-                        <p key={gap.label}>
-                          {gap.label}: {gap.currentLevelText} vs {gap.expectedLabel}
-                        </p>
-                      ))}
-                    </div>
+                    <ReadableComparisonList
+                      title="Puntos fuertes"
+                      intro="Pruebas donde el candidato ya cumple el minimo esperado para el oficio."
+                      emptyText="No hay puntos fuertes destacados."
+                      items={item.strengths}
+                      tone="success"
+                    />
+                    <ReadableComparisonList
+                      title="Por reforzar"
+                      intro="Pruebas que conviene trabajar antes de asignar o mover al candidato."
+                      emptyText="No se encontraron aspectos criticos por reforzar."
+                      items={item.gaps}
+                      tone="warning"
+                    />
                   </div>
                 </article>
               ))}
@@ -479,6 +527,250 @@ function EmptyState({ text, compact = false }) {
   return <div className={compact ? "empty compact" : "empty"}>{text}</div>;
 }
 
+function RoleFitSummary({ matches }) {
+  const visibleMatches = matches.slice(0, 5);
+
+  return (
+    <section className="role-fit-section">
+      <div className="role-fit-header">
+        <h3>Oficios recomendados para esta persona</h3>
+        <p>
+          Comparacion de la evaluacion mas reciente del trabajador contra los
+          requisitos de cada oficio homologado.
+        </p>
+      </div>
+
+      {visibleMatches.length === 0 && (
+        <EmptyState text="Aun no hay oficios con requisitos suficientes para comparar." compact />
+      )}
+
+      {visibleMatches.map((match, index) => (
+        <article key={match.roleId} className="role-fit-card">
+          <div className="role-fit-topline">
+            <div>
+              <span className="role-fit-rank">#{index + 1}</span>
+              <strong>{match.roleName}</strong>
+              <p>
+                {match.areaName || "Sin area"} | {match.lineName || "Sin linea"}
+              </p>
+            </div>
+            <Badge tone={statusTone(match.status)}>
+              {readableStatus(match.status)} | {match.score}
+            </Badge>
+          </div>
+
+          <p className="role-fit-note">{roleFitNote(match.status)}</p>
+
+          <div className="role-fit-evidence">
+            <div>
+              <h4>Lo que favorece el encaje</h4>
+              {match.strengths.length === 0 && <small>Sin fortalezas destacadas.</small>}
+              {match.strengths.slice(0, 2).map((strength) => (
+                <p key={strength.label}>
+                  {strength.label}: nivel obtenido {strength.currentLevelText}
+                </p>
+              ))}
+            </div>
+            <div>
+              <h4>Lo que habria que revisar</h4>
+              {match.gaps.length === 0 && <small>Sin brechas criticas.</small>}
+              {match.gaps.slice(0, 2).map((gap) => (
+                <p key={gap.label}>
+                  {gap.label}: obtenido {gap.currentLevelText}, esperado {gap.expectedLabel}
+                </p>
+              ))}
+            </div>
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function ReadableComparisonList({ title, intro, emptyText, items, tone }) {
+  const isPositive = tone === "success";
+
+  return (
+    <section className={`decision-block ${tone}`}>
+      <div className="decision-block-header">
+        <h4>{title}</h4>
+        <p>{intro}</p>
+      </div>
+
+      {items.length === 0 && <div className="decision-empty">{emptyText}</div>}
+
+      {items.map((item) => (
+        <article key={item.label} className="decision-item">
+          <div className="decision-item-topline">
+            <strong>{item.label}</strong>
+            <span>{isPositive ? "Cumple" : "Reforzar"}</span>
+          </div>
+          <p>
+            {isPositive
+              ? "El resultado esta dentro del nivel requerido para este oficio."
+              : "El resultado esta por debajo del minimo esperado para este oficio."}
+          </p>
+          <dl>
+            <div>
+              <dt>Nivel obtenido</dt>
+              <dd>{item.currentLevelText || "SIN DATO"}</dd>
+            </div>
+            <div>
+              <dt>Nivel esperado</dt>
+              <dd>{item.expectedLabel || "Sin dato"}</dd>
+            </div>
+          </dl>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function RadarChart({ comparisons }) {
+  const centerX = 210;
+  const centerY = 168;
+  const radius = 102;
+  const labelRadius = 134;
+
+  if (!comparisons.length) {
+    return null;
+  }
+
+  const polygonPoints = (valueSelector, fixedRadius = null) =>
+    comparisons
+      .map((item, index) => {
+        const levelRadius =
+          fixedRadius ?? (clampRadarLevel(valueSelector(item)) / 5) * radius;
+        const point = radarPoint(index, comparisons.length, levelRadius, centerX, centerY);
+        return `${point.x},${point.y}`;
+      })
+      .join(" ");
+
+  return (
+    <figure className="radar-card">
+      <div className="radar-topline">
+        <h4>Comparacion de pruebas</h4>
+        <div className="radar-legend">
+          <span>
+            <i className="radar-swatch expected" />
+            Esperado
+          </span>
+          <span>
+            <i className="radar-swatch current" />
+            Obtenido
+          </span>
+        </div>
+      </div>
+      <div className="radar-layout">
+        <svg
+          className="radar-svg"
+          viewBox="0 0 420 340"
+          role="img"
+          aria-label="Radar de niveles esperados y obtenidos"
+        >
+          <title>Radar de niveles esperados y obtenidos</title>
+          {RADAR_LEVELS.map((level) => (
+            <polygon
+              key={level}
+              className="radar-grid"
+              points={polygonPoints(() => level)}
+            />
+          ))}
+          {RADAR_LEVELS.map((level) => {
+            const y = centerY - (level / 5) * radius;
+            return (
+              <text key={level} className="radar-level-label" x={centerX + 5} y={y + 4}>
+                {level}
+              </text>
+            );
+          })}
+          {comparisons.map((item, index) => {
+            const outerPoint = radarPoint(index, comparisons.length, radius, centerX, centerY);
+            const labelPoint = radarPoint(
+              index,
+              comparisons.length,
+              labelRadius,
+              centerX,
+              centerY
+            );
+            return (
+              <g key={item.skillKey}>
+                <line
+                  className="radar-axis"
+                  x1={centerX}
+                  y1={centerY}
+                  x2={outerPoint.x}
+                  y2={outerPoint.y}
+                />
+                <text
+                  className="radar-label"
+                  x={labelPoint.x}
+                  y={labelPoint.y}
+                  textAnchor={radarTextAnchor(labelPoint.x, centerX)}
+                  dominantBaseline="middle"
+                >
+                  {item.label}
+                </text>
+              </g>
+            );
+          })}
+          <polygon
+            className="radar-area expected"
+            points={polygonPoints((item) => item.expectedLevel)}
+          />
+          <polygon
+            className="radar-area current"
+            points={polygonPoints((item) => item.currentLevel)}
+          />
+          {comparisons.map((item, index) => {
+            const expectedPoint = radarPoint(
+              index,
+              comparisons.length,
+              (clampRadarLevel(item.expectedLevel) / 5) * radius,
+              centerX,
+              centerY
+            );
+            const currentPoint = radarPoint(
+              index,
+              comparisons.length,
+              (clampRadarLevel(item.currentLevel) / 5) * radius,
+              centerX,
+              centerY
+            );
+            return (
+              <g key={`${item.skillKey}-points`}>
+                <circle
+                  className="radar-point expected"
+                  cx={expectedPoint.x}
+                  cy={expectedPoint.y}
+                  r="3.5"
+                />
+                <circle
+                  className="radar-point current"
+                  cx={currentPoint.x}
+                  cy={currentPoint.y}
+                  r="3.5"
+                />
+              </g>
+            );
+          })}
+        </svg>
+
+        <div className="radar-details">
+          {comparisons.map((item) => (
+            <div key={`${item.skillKey}-detail`} className="radar-detail">
+              <strong>{item.label}</strong>
+              <span>
+                {item.currentLevelText || "SIN DATO"} vs {item.expectedLabel}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </figure>
+  );
+}
+
 function statusTone(status) {
   if (status === "apto") return "success";
   if (status === "requiere reentrenamiento") return "warning";
@@ -486,9 +778,52 @@ function statusTone(status) {
   return "danger";
 }
 
+function readableStatus(status) {
+  if (status === "apto") return "Apto";
+  if (status === "requiere reentrenamiento") return "Requiere refuerzo";
+  if (status === "pendiente homologacion") return "Pendiente";
+  return "No recomendado";
+}
+
+function roleFitNote(status) {
+  if (status === "apto") {
+    return "Buen candidato para considerar en este oficio con la informacion disponible.";
+  }
+
+  if (status === "requiere reentrenamiento") {
+    return "Puede ser una alternativa si se refuerzan las pruebas marcadas antes del cambio.";
+  }
+
+  if (status === "pendiente homologacion") {
+    return "Faltan requisitos homologados para comparar este oficio con confianza.";
+  }
+
+  return "No es la mejor opcion para este oficio segun la evaluacion actual.";
+}
+
 function formatWeightAsPercent(weight) {
   const numericWeight = Number(weight || 0);
   return `${Math.round(numericWeight * 100)}%`;
+}
+
+function clampRadarLevel(value) {
+  const numericValue = Number(value || 0);
+  if (!Number.isFinite(numericValue)) return 0;
+  return Math.min(5, Math.max(0, numericValue));
+}
+
+function radarPoint(index, total, pointRadius, centerX, centerY) {
+  const angle = -Math.PI / 2 + (index * 2 * Math.PI) / total;
+  return {
+    x: centerX + Math.cos(angle) * pointRadius,
+    y: centerY + Math.sin(angle) * pointRadius,
+  };
+}
+
+function radarTextAnchor(x, centerX) {
+  if (x > centerX + 8) return "start";
+  if (x < centerX - 8) return "end";
+  return "middle";
 }
 
 export default App;

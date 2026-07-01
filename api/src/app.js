@@ -1,7 +1,10 @@
 const express = require("express");
 const cors = require("cors");
 const { env } = require("./config/env");
-const { postRoleAlias } = require("./controllers/rolesController");
+const {
+  postRoleAlias,
+  removeRoleAlias,
+} = require("./controllers/rolesController");
 const importRoutes = require("./routes/imports");
 const roleRoutes = require("./routes/roles");
 const workerRoutes = require("./routes/workers");
@@ -22,6 +25,7 @@ app.get("/health", (req, res) => {
 
 app.use("/api/imports", importRoutes);
 app.post("/api/role-aliases", postRoleAlias);
+app.delete("/api/role-aliases/:id", removeRoleAlias);
 app.use("/api/roles", roleRoutes);
 app.use("/api/workers", workerRoutes);
 app.use("/api/recommendations", recommendationRoutes);

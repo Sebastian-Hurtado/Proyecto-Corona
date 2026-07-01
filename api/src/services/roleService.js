@@ -171,7 +171,60 @@ async function createRoleAlias(sourceName, roleId) {
   });
 }
 
+async function deleteRoleAlias(aliasId) {
+  return withTransaction(async (client) => {
+    const aliasResult = await client.query(
+      `
+        DELETE FROM role_aliases
+        WHERE id = $1
+        RETURNING id, source_name, normalized_source_name, role_id
+      `,
+      [aliasId]
+    );
+    const alias = aliasResult.rows[0];
+
+    if (!alias) {
+      throw new Error("No se encontro la homologacion seleccionada.");
+    }
+
+    await client.query(
+      `
+        UPDATE role_requirements
+        SET role_id = NULL, updated_at = NOW()
+        WHERE normalized_source_role_name = $1
+      `,
+      [alias.normalized_source_name]
+    );
+
+    await client.query(
+      `
+        UPDATE worker_assessments
+        SET role_id = NULL, updated_at = NOW()
+        WHERE normalized_source_role_name = $1
+      `,
+      [alias.normalized_source_name]
+    );
+
+    await client.query(
+      `
+        UPDATE import_issues
+        SET resolved = FALSE
+        WHERE normalized_value = $1
+      `,
+      [alias.normalized_source_name]
+    );
+
+    return {
+      id: alias.id,
+      source_name: alias.source_name,
+      normalized_source_name: alias.normalized_source_name,
+      role_id: alias.role_id,
+    };
+  });
+}
+
 module.exports = {
   listRoles,
   createRoleAlias,
+  deleteRoleAlias,
 };

@@ -42,6 +42,14 @@ export async function createRoleAlias(sourceName, roleId) {
   return parseResponse(response);
 }
 
+export async function deleteRoleAlias(aliasId) {
+  const response = await fetch(`${API_URL}/role-aliases/${aliasId}`, {
+    method: "DELETE",
+  });
+
+  return parseResponse(response);
+}
+
 export async function uploadExcel(file) {
   const formData = new FormData();
   formData.append("file", file);

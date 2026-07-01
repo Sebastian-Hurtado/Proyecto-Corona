@@ -122,6 +122,18 @@ async function getRecommendations(roleId) {
           currentLevelText: item.currentLevelText,
           expectedLabel: item.expectedLabel,
         })),
+        skillComparisons: scored.skillComparisons.map((item) => ({
+          skillKey: item.skillKey,
+          label: SKILL_LABELS[item.skillKey] || item.label,
+          currentLevel: item.currentLevel,
+          currentLevelText: item.currentLevelText,
+          expectedLevel: item.expectedLevel,
+          expectedLabel: item.expectedLabel,
+          minLevel: item.minLevel,
+          maxLevel: item.maxLevel,
+          weight: item.weight,
+          requirementKind: item.requirementKind,
+        })),
       };
     })
     .sort((left, right) => {
