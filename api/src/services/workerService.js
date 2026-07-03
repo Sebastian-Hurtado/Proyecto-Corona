@@ -65,7 +65,9 @@ async function getWorkerById(workerId) {
     `
       SELECT
         wa.id,
+        wa.role_id,
         wa.source_role_name,
+        wa.normalized_source_role_name,
         wa.line_name,
         wa.assessment_date,
         wa.overall_level_text,
@@ -126,15 +128,115 @@ async function getWorkerById(workerId) {
         skillMapsByAssessment.get(latestAssessment.id) || {}
       )
     : [];
+  const assessmentComparisons = await getAssessmentRoleComparisons(
+    assessmentsResult.rows,
+    skillMapsByAssessment
+  );
 
   return {
     ...worker,
     assessments: assessmentsResult.rows.map((assessment) => ({
       ...assessment,
       skills: skillsByAssessment.get(assessment.id) || [],
+      skillComparisons: assessmentComparisons.get(assessment.id) || [],
     })),
     roleMatches,
   };
+}
+
+async function getAssessmentRoleComparisons(assessments, skillMapsByAssessment) {
+  const roleIds = [
+    ...new Set(assessments.map((assessment) => assessment.role_id).filter(Boolean)),
+  ];
+  const normalizedSourceNames = [
+    ...new Set(
+      assessments
+        .map((assessment) => assessment.normalized_source_role_name)
+        .filter(Boolean)
+    ),
+  ];
+
+  if (!roleIds.length && !normalizedSourceNames.length) {
+    return new Map();
+  }
+
+  const requirementsResult = await query(
+    `
+      SELECT
+        role_id AS "roleId",
+        skill_key AS "skillKey",
+        weight,
+        requirement_kind AS "requirementKind",
+        min_level AS "minLevel",
+        max_level AS "maxLevel",
+        desired_label AS "desiredLabel",
+        expected_text AS "expectedText",
+        normalized_source_role_name AS "normalizedSourceRoleName"
+      FROM role_requirements
+      WHERE role_id = ANY($1::int[])
+        OR normalized_source_role_name = ANY($2::text[])
+      ORDER BY role_id, skill_key
+    `,
+    [roleIds, normalizedSourceNames]
+  );
+
+  const requirementsByRole = new Map();
+  const requirementsBySource = new Map();
+
+  for (const requirement of requirementsResult.rows) {
+    if (requirement.roleId && !requirementsByRole.has(requirement.roleId)) {
+      requirementsByRole.set(requirement.roleId, []);
+    }
+
+    if (requirement.roleId) {
+      requirementsByRole.get(requirement.roleId).push(requirement);
+    }
+
+    if (requirement.normalizedSourceRoleName) {
+      if (!requirementsBySource.has(requirement.normalizedSourceRoleName)) {
+        requirementsBySource.set(requirement.normalizedSourceRoleName, []);
+      }
+
+      requirementsBySource.get(requirement.normalizedSourceRoleName).push(requirement);
+    }
+  }
+
+  const comparisonsByAssessment = new Map();
+
+  for (const assessment of assessments) {
+    const requirements =
+      requirementsByRole.get(assessment.role_id) ||
+      requirementsBySource.get(assessment.normalized_source_role_name) ||
+      [];
+
+    if (!requirements.length) {
+      continue;
+    }
+
+    const scored = scoreWorkerAgainstRole(
+      requirements,
+      skillMapsByAssessment.get(assessment.id) || {},
+      true
+    );
+
+    comparisonsByAssessment.set(
+      assessment.id,
+      scored.skillComparisons.map((item) => ({
+        skillKey: item.skillKey,
+        label: SKILL_LABELS[item.skillKey] || item.label,
+        currentLevel: item.currentLevel,
+        currentLevelText: item.currentLevelText,
+        expectedLevel: item.expectedLevel,
+        expectedLabel: item.expectedLabel,
+        minLevel: item.minLevel,
+        maxLevel: item.maxLevel,
+        weight: item.weight,
+        requirementKind: item.requirementKind,
+      }))
+    );
+  }
+
+  return comparisonsByAssessment;
 }
 
 async function getWorkerRoleMatches(assessmentId, skillMap) {
@@ -205,6 +307,18 @@ async function getWorkerRoleMatches(assessmentId, skillMap) {
           label: SKILL_LABELS[item.skillKey] || item.label,
           currentLevelText: item.currentLevelText,
           expectedLabel: item.expectedLabel,
+        })),
+        skillComparisons: scored.skillComparisons.map((item) => ({
+          skillKey: item.skillKey,
+          label: SKILL_LABELS[item.skillKey] || item.label,
+          currentLevel: item.currentLevel,
+          currentLevelText: item.currentLevelText,
+          expectedLevel: item.expectedLevel,
+          expectedLabel: item.expectedLabel,
+          minLevel: item.minLevel,
+          maxLevel: item.maxLevel,
+          weight: item.weight,
+          requirementKind: item.requirementKind,
         })),
       };
     })

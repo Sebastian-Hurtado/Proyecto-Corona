@@ -36,6 +36,15 @@ const FIXED_ROLES = [
   normalizedName: normalizeRoleName(role.roleName),
 }));
 
+const FIXED_ROLE_ALIASES = [
+  {
+    sourceName: "Formador",
+    normalizedSourceName: normalizeRoleName("Formador"),
+    targetNormalizedName: normalizeRoleName("Operador de colaje Mecanizado One Piece"),
+  },
+];
+
 module.exports = {
   FIXED_ROLES,
+  FIXED_ROLE_ALIASES,
 };

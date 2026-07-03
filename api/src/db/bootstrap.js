@@ -1,7 +1,7 @@
 const fs = require("fs/promises");
 const path = require("path");
 const { pool } = require("./index");
-const { FIXED_ROLES } = require("./fixedRoles");
+const { FIXED_ROLES, FIXED_ROLE_ALIASES } = require("./fixedRoles");
 
 async function ensureDatabaseSchema() {
   const schemaPath = path.resolve(__dirname, "schema.sql");
@@ -28,6 +28,55 @@ async function ensureDatabaseSchema() {
         role.roleName,
         role.normalizedName,
       ]
+    );
+  }
+
+  for (const alias of FIXED_ROLE_ALIASES) {
+    const roleResult = await pool.query(
+      `SELECT id FROM roles WHERE normalized_name = $1 LIMIT 1`,
+      [alias.targetNormalizedName]
+    );
+    const roleId = roleResult.rows[0]?.id;
+
+    if (!roleId) {
+      continue;
+    }
+
+    await pool.query(
+      `
+        INSERT INTO role_aliases (source_name, normalized_source_name, role_id)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (normalized_source_name)
+        DO UPDATE SET role_id = EXCLUDED.role_id
+      `,
+      [alias.sourceName, alias.normalizedSourceName, roleId]
+    );
+
+    await pool.query(
+      `
+        UPDATE role_requirements
+        SET role_id = $2, updated_at = NOW()
+        WHERE normalized_source_role_name = $1
+      `,
+      [alias.normalizedSourceName, roleId]
+    );
+
+    await pool.query(
+      `
+        UPDATE worker_assessments
+        SET role_id = $2, updated_at = NOW()
+        WHERE normalized_source_role_name = $1
+      `,
+      [alias.normalizedSourceName, roleId]
+    );
+
+    await pool.query(
+      `
+        UPDATE import_issues
+        SET resolved = TRUE
+        WHERE normalized_value = $1
+      `,
+      [alias.normalizedSourceName]
     );
   }
 

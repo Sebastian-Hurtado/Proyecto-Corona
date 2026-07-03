@@ -29,6 +29,7 @@ function App() {
   });
   const [workers, setWorkers] = useState([]);
   const [workerDetail, setWorkerDetail] = useState(null);
+  const [workerSearch, setWorkerSearch] = useState("");
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [recommendationData, setRecommendationData] = useState(null);
   const [aliasSelections, setAliasSelections] = useState({});
@@ -47,6 +48,24 @@ function App() {
       setSelectedRoleId(String(rolesPayload.roles[0].id));
     }
   }
+
+  const filteredWorkers = workers.filter((worker) => {
+    const searchTerm = normalizeSearchValue(workerSearch);
+
+    if (!searchTerm) {
+      return true;
+    }
+
+    return [
+      worker.full_name,
+      worker.document_number,
+      worker.matched_role_name,
+      worker.source_role_name,
+      worker.matched_area_name,
+    ]
+      .map(normalizeSearchValue)
+      .some((value) => value.includes(searchTerm));
+  });
 
   useEffect(() => {
     setLoading(true);
@@ -262,8 +281,22 @@ function App() {
       {activeTab === "Trabajadores" && (
         <section className="grid two-columns">
           <Panel title="Listado de trabajadores" subtitle="Vista rapida de la ultima evaluacion disponible.">
+            <div className="search-field">
+              <label htmlFor="worker-search">Buscar trabajador</label>
+              <input
+                id="worker-search"
+                type="search"
+                value={workerSearch}
+                onChange={(event) => setWorkerSearch(event.target.value)}
+                placeholder="Nombre, cedula u oficio"
+              />
+            </div>
+
             <div className="stack-list">
-              {workers.map((worker) => (
+              {filteredWorkers.length === 0 && (
+                <EmptyState text="No hay trabajadores que coincidan con la busqueda." compact />
+              )}
+              {filteredWorkers.map((worker) => (
                 <button
                   key={worker.id}
                   className="list-row"
@@ -306,6 +339,15 @@ function App() {
                     </div>
                     <p>Area: {assessment.matched_area_name || "Sin area"}</p>
                     <p>Nivel global: {assessment.overall_level_text || "Sin dato"}</p>
+                    {assessment.skillComparisons?.length > 0 && (
+                      <RadarChart comparisons={assessment.skillComparisons} />
+                    )}
+                    {assessment.skillComparisons?.length === 0 && assessment.matched_role_name && (
+                      <div className="comparison-unavailable">
+                        Este oficio todavia no tiene requisitos de pruebas cargados para
+                        mostrar la comparacion visual.
+                      </div>
+                    )}
                     <div className="skill-grid">
                       {assessment.skills.map((skill) => (
                         <div key={skill.skill_key} className="skill-pill">
@@ -451,7 +493,7 @@ function App() {
             )}
           </Panel>
 
-          <Panel title="Ranking de candidatos" subtitle="Prioriza aptos y marca brechas para reentrenamiento.">
+          <Panel title="Ranking de candidatos" subtitle="Prioriza aptos y marca brechas para entrenamiento.">
             {!recommendationData && <EmptyState text="Selecciona un oficio para calcular recomendaciones." />}
             {recommendationData && recommendationData.ranking.length === 0 && (
               <EmptyState text="Aun no hay evaluaciones para rankear." />
@@ -465,7 +507,7 @@ function App() {
                       <p>{item.documentNumber}</p>
                     </div>
                     <Badge tone={statusTone(item.status)}>
-                      {item.status} | {item.score}
+                      {recommendationStatusLabel(item.status)} | {item.score}
                     </Badge>
                   </div>
                   <p>Rol fuente: {item.sourceRoleName || "Sin rol fuente"}</p>
@@ -560,6 +602,10 @@ function RoleFitSummary({ matches }) {
           </div>
 
           <p className="role-fit-note">{roleFitNote(match.status)}</p>
+
+          {match.skillComparisons?.length > 0 && (
+            <RadarChart comparisons={match.skillComparisons} />
+          )}
 
           <div className="role-fit-evidence">
             <div>
@@ -778,6 +824,11 @@ function statusTone(status) {
   return "danger";
 }
 
+function recommendationStatusLabel(status) {
+  if (status === "requiere reentrenamiento") return "requiere entrenamiento";
+  return status;
+}
+
 function readableStatus(status) {
   if (status === "apto") return "Apto";
   if (status === "requiere reentrenamiento") return "Requiere refuerzo";
@@ -824,6 +875,14 @@ function radarTextAnchor(x, centerX) {
   if (x > centerX + 8) return "start";
   if (x < centerX - 8) return "end";
   return "middle";
+}
+
+function normalizeSearchValue(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 export default App;

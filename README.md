@@ -15,6 +15,8 @@ Hoy el prototipo:
 - detecta nombres de oficios que no coinciden exactamente
 - permite homologar esos nombres manualmente
 - calcula un ranking de trabajadores por puesto
+- calcula en que puestos puede encajar mejor un trabajador especifico
+- muestra comparaciones visuales tipo radar entre el nivel esperado del oficio y el nivel obtenido por el colaborador
 
 ## Stack actual
 
@@ -98,6 +100,7 @@ el sistema:
 - crea el esquema si no existe
 - inserta los puestos fijos
 - actualiza sus nombres, area y linea si cambian
+- siembra equivalencias fijas necesarias para el piloto
 
 Puestos fijos actuales del piloto:
 
@@ -106,6 +109,12 @@ Puestos fijos actuales del piloto:
 - `TERMINADOS - Pulidor de pieza One Piece`
 - `TERMINADOS - Cargador de Tazas`
 - `CLASIFICACION FINAL - Clasificador de pieza One Piece`
+
+Equivalencias fijas actuales:
+
+- `Formador` -> `Operador de colaje Mecanizado One Piece`
+
+Esta equivalencia permite que los requisitos cargados desde el Excel como `Formador` alimenten el oficio canonico de operador dentro del piloto.
 
 ## Que archivos Excel si se usan
 
@@ -239,6 +248,15 @@ Una vez homologado:
 - aparece en `Homologaciones activas`
 - mejora el ranking en `Recomendaciones`
 
+### Que pasa cuando deshaces una homologacion
+
+En `Homologaciones activas`, el boton `Deshacer`:
+
+- elimina la equivalencia de `role_aliases`
+- vuelve a dejar sin rol asociado los requisitos y evaluaciones de esa fuente
+- marca los issues relacionados como pendientes
+- hace que la fuente vuelva a aparecer en `Fuentes pendientes` para poder homologarla de nuevo
+
 ## Como cruza la informacion el sistema
 
 Hoy el sistema no cruza todo por `Numero de registro`.
@@ -344,8 +362,9 @@ Cada tarjeta muestra:
 - rol fuente
 - estado final
 - score total
-- fortalezas
-- brechas
+- radar `Esperado` vs `Obtenido`
+- puntos fuertes
+- aspectos por reforzar
 
 ### Importante: que significa "Rol fuente"
 
@@ -354,6 +373,22 @@ Cada tarjeta muestra:
 No significa que solo pueda competir para ese rol.
 
 Hoy el sistema compara a todos los trabajadores cargados contra el puesto objetivo seleccionado.
+
+### Recomendacion inversa por trabajador
+
+En la pantalla `Trabajadores`, al seleccionar una persona, el sistema tambien compara su evaluacion mas reciente contra todos los oficios homologados.
+
+Esto permite responder otra pregunta operativa:
+
+> si esta persona no encaja bien en su labor actual, en que otros oficios podria funcionar mejor
+
+El detalle del trabajador muestra:
+
+- buscador por nombre, cedula, oficio o area
+- evaluaciones cargadas para la persona
+- radar del colaborador contra el oficio de su evaluacion, si existen requisitos comparables
+- ranking de `Oficios recomendados para esta persona`
+- fortalezas y aspectos por revisar para cada oficio sugerido
 
 ## Que NO hace todavia el motor
 
@@ -384,9 +419,11 @@ Hoy el motor es:
 
 ### `Trabajadores`
 
-- lista de trabajadores
+- lista de trabajadores con buscador por nombre, cedula, oficio o area
 - detalle de evaluaciones
 - area del puesto homologado
+- radar esperado vs obtenido para la evaluacion del trabajador cuando el oficio tiene requisitos
+- oficios recomendados para esa persona, ordenados por compatibilidad
 
 ### `Oficios`
 
@@ -400,12 +437,15 @@ Hoy el motor es:
 
 - pendientes por resolver
 - homologaciones activas
+- deshacer homologaciones activas para corregir una asociacion
 
 ### `Recomendaciones`
 
 - seleccion de oficio
 - ranking de candidatos
 - area y linea del oficio seleccionado
+- radar esperado vs obtenido por candidato
+- lectura ejecutiva de puntos fuertes y aspectos por reforzar
 
 ## Endpoints principales
 
@@ -415,6 +455,7 @@ Hoy el motor es:
 - `GET /api/workers/:id`
 - `GET /api/roles`
 - `POST /api/role-aliases`
+- `DELETE /api/role-aliases/:id`
 - `GET /api/recommendations?roleId=...`
 
 ## Tablas principales
