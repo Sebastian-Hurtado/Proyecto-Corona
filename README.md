@@ -1,515 +1,201 @@
-# Corona Talent Prototype
+# Cerebro Digital 2.0
 
-Prototipo v1 para consolidar trabajadores, oficios y recomendaciones de asignacion de talento operativo en Corona.
+Aplicativo web full-stack para apoyar la asignacion estrategica del talento operativo en Corona. El sistema centraliza informacion de trabajadores, oficios y pruebas de habilidad para recomendar candidatos por puesto y sugerir posibles puestos para cada colaborador.
 
-## Que hace este proyecto
+## Resumen
 
-Este sistema busca responder una pregunta operativa:
+En procesos operativos con multiples oficios, la asignacion de personal suele depender de archivos dispersos, nombres de cargos inconsistentes y criterios dificiles de comparar. **Cerebro Digital 2.0** resuelve ese problema mediante una plataforma que importa datos desde Excel, homologa oficios, calcula compatibilidad trabajador-puesto y muestra resultados visuales para facilitar la toma de decisiones.
 
-> dado un oficio objetivo, que trabajador encaja mejor segun sus resultados de pruebas y los requisitos del puesto
+El prototipo fue desarrollado como una herramienta funcional para el piloto `One Piece`, con enfoque en trazabilidad, explicabilidad y experiencia de usuario para supervisores o responsables de talento operativo.
 
-Hoy el prototipo:
+## Funcionalidades principales
 
-- mantiene un catalogo fijo de puestos del piloto `One Piece`
-- carga informacion desde Excel
-- detecta nombres de oficios que no coinciden exactamente
-- permite homologar esos nombres manualmente
-- calcula un ranking de trabajadores por puesto
-- calcula en que puestos puede encajar mejor un trabajador especifico
-- muestra comparaciones visuales tipo radar entre el nivel esperado del oficio y el nivel obtenido por el colaborador
+- **Carga de datos desde Excel** para diagnosticos, requisitos por oficio y perfiles de referencia.
+- **Catalogo fijo de oficios** del piloto `One Piece`.
+- **Homologacion de cargos** para relacionar nombres inconsistentes del Excel con oficios canonicos.
+- **Deshacer homologaciones** para corregir asociaciones sin tocar la base de datos manualmente.
+- **Motor de recomendacion explicable** basado en pruebas, pesos y niveles de desempeno.
+- **Ranking de candidatos por oficio**, priorizando aptos y marcando brechas de entrenamiento.
+- **Recomendacion inversa por trabajador**, para identificar en que otros oficios podria encajar mejor una persona.
+- **Graficos radar** que comparan el nivel esperado del oficio contra el nivel obtenido por el colaborador.
+- **Buscador de trabajadores** por nombre, cedula, oficio o area.
+- **Interfaz corporativa** alineada visualmente con el contexto de Corona.
 
-## Stack actual
+## Mi aporte
 
-- `api/`: Node.js + Express + PostgreSQL + `pg`
-- `web/`: React + Vite
-- Base de datos local: PostgreSQL en Docker
+Mi aporte fue desarrollar y mejorar el aplicativo, integrando funciones para cargar datos, homologar cargos, recomendar candidatos por oficio y sugerir posibles puestos para cada colaborador mediante comparaciones visuales y criterios basados en pruebas. Tambien trabaje en la experiencia de usuario, la documentacion tecnica y la presentacion del proyecto como herramienta funcional.
 
-## Requisitos
+## Stack tecnico
+
+### Frontend
+
+- React
+- Vite
+- CSS modular en `web/src/styles/app.css`
+- Visualizaciones SVG nativas para los graficos radar
+
+### Backend
+
+- Node.js
+- Express
+- PostgreSQL
+- `pg`
+- `xlsx` para lectura de archivos Excel
+
+### Infraestructura local
+
+- Docker Compose
+- PostgreSQL en contenedor
+
+## Como funciona el motor de recomendacion
+
+El motor compara los resultados de cada trabajador contra los requisitos de un oficio usando una escala comun:
+
+| Nivel | Valor |
+| --- | --- |
+| Muy bajo | 1 |
+| Bajo | 2 |
+| Medio | 3 |
+| Alto | 4 |
+| Muy alto | 5 |
+
+Para cada prueba, el sistema toma:
+
+- nivel obtenido por el trabajador,
+- rango esperado por el oficio,
+- peso de la prueba,
+- tipo de requisito: `maestra` o `complementaria`.
+
+Luego calcula un score de `0` a `100` y clasifica el resultado en:
+
+- `Apto`
+- `Requiere entrenamiento`
+- `No recomendado`
+- `Pendiente homologacion`
+
+El motor no es una caja negra: cada recomendacion muestra fortalezas, brechas y un radar comparativo `Esperado` vs `Obtenido`.
+
+## Pantallas del aplicativo
+
+### Carga de datos
+
+Permite subir archivos Excel y revisar los lotes importados, errores e inconsistencias detectadas.
+
+### Trabajadores
+
+Muestra el listado de trabajadores, permite buscar por nombre o cedula, ver evaluaciones individuales y analizar en que oficios puede encajar mejor cada persona.
+
+### Oficios
+
+Presenta el catalogo fijo de puestos del piloto, con linea, area y requisitos asociados.
+
+### Homologaciones
+
+Permite asociar nombres origen del Excel con oficios canonicos. Tambien permite deshacer una homologacion activa para corregirla.
+
+### Recomendaciones
+
+Permite seleccionar un oficio y ver el ranking de candidatos, con estado, score, fortalezas, brechas y grafico radar.
+
+## Estructura del proyecto
+
+```text
+Cerebro-2.0/
+├── api/
+│   ├── src/
+│   │   ├── controllers/
+│   │   ├── db/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   └── utils/
+│   └── tests/
+├── web/
+│   └── src/
+│       ├── App.jsx
+│       ├── api.js
+│       └── styles/
+└── docker-compose.yml
+```
+
+## Instalacion y ejecucion local
+
+### Requisitos
 
 - Node.js 22 o superior
 - Docker Desktop
 
-## Arranque rapido
-
-1. Levantar PostgreSQL:
+### 1. Levantar PostgreSQL
 
 ```powershell
 docker compose up -d
 ```
 
-2. Configurar variables de entorno:
+### 2. Configurar variables de entorno
 
 ```powershell
-Copy-Item api\\.env.example api\\.env
-Copy-Item web\\.env.example web\\.env
+Copy-Item api\.env.example api\.env
+Copy-Item web\.env.example web\.env
 ```
 
-3. Instalar dependencias.
-
-En PowerShell de Windows puede ser mas estable usar `npm.cmd` si `npm` esta bloqueado por Execution Policy:
+### 3. Instalar dependencias
 
 ```powershell
 cd api
 npm.cmd install
-cd ..\\web
+
+cd ..\web
 npm.cmd install
 ```
 
-4. Inicializar esquema y sembrar puestos fijos:
+### 4. Inicializar base de datos
 
 ```powershell
-cd api
+cd ..\api
 npm.cmd run db:init
 ```
 
-5. Levantar API y frontend en terminales separadas:
+### 5. Ejecutar backend y frontend
+
+Terminal 1:
 
 ```powershell
 cd api
 npm.cmd run dev
 ```
+
+Terminal 2:
 
 ```powershell
 cd web
 npm.cmd run dev
 ```
 
-6. Abrir la app:
+Abrir:
 
-- Frontend: `http://localhost:5173`
-- Health check API: `http://localhost:4000/health`
-
-## Como funciona el sistema hoy
-
-### 1. Los puestos de trabajo son fijos
-
-Los puestos del piloto ya no se cargan desde Excel.
-
-Hoy el catalogo vive en:
-
-- `api/src/db/fixedRoles.js`
-
-Cuando ejecutas:
-
-```powershell
-npm.cmd run db:init
+```text
+http://localhost:5173
 ```
 
-el sistema:
-
-- crea el esquema si no existe
-- inserta los puestos fijos
-- actualiza sus nombres, area y linea si cambian
-- siembra equivalencias fijas necesarias para el piloto
-
-Puestos fijos actuales del piloto:
-
-- `COLAJE - Operador de colaje Mecanizado One Piece`
-- `COLAJE - Ayudante de One Piece`
-- `TERMINADOS - Pulidor de pieza One Piece`
-- `TERMINADOS - Cargador de Tazas`
-- `CLASIFICACION FINAL - Clasificador de pieza One Piece`
-
-Equivalencias fijas actuales:
-
-- `Formador` -> `Operador de colaje Mecanizado One Piece`
-
-Esta equivalencia permite que los requisitos cargados desde el Excel como `Formador` alimenten el oficio canonico de operador dentro del piloto.
-
-## Que archivos Excel si se usan
-
-### 1. `Informacion Pruebas de seleccion por oficio B&C.xlsx`
-
-Se usa para cargar:
-
-- pruebas requeridas por oficio
-- peso de cada prueba
-- rango esperado por prueba
-- tipo de prueba: `maestra` o `complementaria`
-
-Esto llena principalmente la tabla:
-
-- `role_requirements`
-
-### 2. `Base de Datos Diagnosticos EDD.xlsx`
-
-Se usa para cargar:
-
-- trabajadores
-- evaluaciones
-- resultados de pruebas
-
-Esto llena principalmente:
-
-- `workers`
-- `worker_assessments`
-- `skill_results`
-
-### 3. `PERFIL ANTROPOMETRICO LINEA OP.xlsx`
-
-Se usa para guardar:
-
-- perfil ideal
-- criterios de exclusion
-- referencia por linea
-
-Esto llena:
-
-- `anthropometric_profiles`
-
-### 4. `Cargo - Oficios de planta SL.xlsx`
-
-Ya no se usa para crear puestos.
-
-Si lo subes, el backend no rompe, pero devuelve un resultado tipo:
-
-- `skipped: true`
-
-porque los puestos ahora son fijos en el sistema.
-
-## Flujo recomendado para probar
-
-1. Los puestos ya vienen fijos
-2. Cargar `Informacion Pruebas de seleccion por oficio B&C.xlsx`
-3. Cargar `Base de Datos Diagnosticos EDD.xlsx`
-4. Cargar `PERFIL ANTROPOMETRICO LINEA OP.xlsx`
-5. Ir a `Homologaciones`
-6. Resolver nombres pendientes
-7. Ir a `Recomendaciones`
-
-## Como funciona la pantalla "Carga de datos"
-
-En la pestana `Carga de datos`:
-
-1. seleccionas un archivo Excel
-2. el backend detecta de que tipo es
-3. lo importa a PostgreSQL
-4. guarda un lote de importacion
-5. registra errores o pendientes en `import_issues`
-
-La app te muestra:
-
-- `Ultima importacion`
-- `Tipo`
-- `Lote`
-- resumen de registros cargados
-- issues del lote
-
-### Que significa un issue
-
-Un issue normalmente significa una de estas cosas:
-
-- un oficio vino con un nombre distinto al catalogo fijo
-- una fila venia incompleta
-- una fuente no pudo relacionarse automaticamente
-
-## Como funciona "Homologaciones"
-
-La homologacion existe porque distintos Excel no usan exactamente el mismo nombre de oficio.
-
-Ejemplo:
-
-- Excel de diagnosticos: `OPERADOR COLEJAE MECANIZADO OP`
-- Catalogo fijo: `Operador de colaje Mecanizado One Piece`
-
-El sistema no siempre puede asumir que ambos son lo mismo.
-
-Por eso crea una lista de:
-
-- `Fuentes pendientes`
-
-### Que significa cada fila
-
-Cada fila muestra:
-
-- nombre fuente encontrado en Excel
-- de que origen viene:
-  - `assessments`
-  - `requirements`
-- cuantas veces aparecio
-
-### Que haces ahi
-
-1. escoges el puesto canonico correcto
-2. clic en `Guardar`
-
-### Que pasa cuando guardas
-
-El backend:
-
-- crea una equivalencia en `role_aliases`
-- actualiza `role_requirements` para apuntar al rol fijo correcto
-- actualiza `worker_assessments` para apuntar al rol fijo correcto
-- marca los issues relacionados como resueltos
-
-Una vez homologado:
-
-- desaparece de `Fuentes pendientes`
-- aparece en `Homologaciones activas`
-- mejora el ranking en `Recomendaciones`
-
-### Que pasa cuando deshaces una homologacion
-
-En `Homologaciones activas`, el boton `Deshacer`:
-
-- elimina la equivalencia de `role_aliases`
-- vuelve a dejar sin rol asociado los requisitos y evaluaciones de esa fuente
-- marca los issues relacionados como pendientes
-- hace que la fuente vuelva a aparecer en `Fuentes pendientes` para poder homologarla de nuevo
-
-## Como cruza la informacion el sistema
-
-Hoy el sistema no cruza todo por `Numero de registro`.
-
-El cruce real funciona asi:
-
-- trabajador: por `cedula` / `document_number`
-- evaluacion: por `worker_id + source_record_number`
-- requisitos del oficio: por `nombre de oficio normalizado`
-- homologaciones: por `normalized_source_name`
-
-### Resumen practico
-
-- la persona se identifica por cedula
-- el oficio se identifica por nombre normalizado u homologado
-- el numero de registro ayuda a distinguir evaluaciones, pero no es la llave global del sistema
-
-## Motor de recomendacion actual
-
-### Objetivo
-
-Dado un puesto fijo seleccionado por el usuario, el sistema calcula que tan bien encaja cada trabajador.
-
-### Datos que usa hoy
-
-Para un oficio seleccionado, el motor usa:
-
-- requisitos del puesto desde `role_requirements`
-- ultima evaluacion disponible de cada trabajador desde `worker_assessments`
-- resultados de pruebas desde `skill_results`
-
-### Pruebas usadas hoy
-
-El motor trabaja con estas 5 pruebas:
-
-- `Minnesota`
-- `Purdue`
-- `Batak`
-- `Sonda Espacial`
-- `Dedos Sueltos`
-
-### Pesos actuales
-
-Los pesos salen del Excel de requisitos y hoy suelen verse asi:
-
-- `Minnesota`: `30%`
-- `Batak`: `25%`
-- `Sonda Espacial`: `20%`
-- `Dedos Sueltos`: `15%`
-- `Purdue`: `10%`
-
-### Como calcula el score
-
-Para cada prueba:
-
-1. toma el nivel del trabajador
-2. toma el rango esperado del oficio
-3. si el nivel cae dentro del rango, esa prueba aporta `100%` de su peso
-4. si cae por fuera, se penaliza segun la distancia
-
-Despues:
-
-- suma los aportes ponderados
-- divide por el peso total
-- lo lleva a una escala `0-100`
-
-### Estados actuales
-
-El motor puede devolver:
-
-- `apto`
-- `requiere reentrenamiento`
-- `no recomendado`
-- `pendiente homologacion`
-
-### Reglas de estado
-
-- si el oficio no tiene requisitos homologados, el estado es `pendiente homologacion`
-- si una prueba `maestra` queda por debajo del minimo esperado, el estado pasa a `requiere reentrenamiento`
-- si no hay fallas criticas y el score es `>= 75`, queda `apto`
-- si el score esta entre `45` y `74`, queda `requiere reentrenamiento`
-- si queda por debajo, pasa a `no recomendado`
-
-### Como ordena el ranking
-
-Orden actual:
-
-1. `apto`
-2. `requiere reentrenamiento`
-3. `no recomendado`
-4. `pendiente homologacion`
-
-Y dentro de cada estado:
-
-- mayor score primero
-
-### Que muestra cada tarjeta de recomendacion
-
-Cada tarjeta muestra:
-
-- nombre del trabajador
-- documento
-- rol fuente
-- estado final
-- score total
-- radar `Esperado` vs `Obtenido`
-- puntos fuertes
-- aspectos por reforzar
-
-### Importante: que significa "Rol fuente"
-
-`Rol fuente` es el oficio con el que ese trabajador venia evaluado en el Excel de diagnosticos.
-
-No significa que solo pueda competir para ese rol.
-
-Hoy el sistema compara a todos los trabajadores cargados contra el puesto objetivo seleccionado.
-
-### Recomendacion inversa por trabajador
-
-En la pantalla `Trabajadores`, al seleccionar una persona, el sistema tambien compara su evaluacion mas reciente contra todos los oficios homologados.
-
-Esto permite responder otra pregunta operativa:
-
-> si esta persona no encaja bien en su labor actual, en que otros oficios podria funcionar mejor
-
-El detalle del trabajador muestra:
-
-- buscador por nombre, cedula, oficio o area
-- evaluaciones cargadas para la persona
-- radar del colaborador contra el oficio de su evaluacion, si existen requisitos comparables
-- ranking de `Oficios recomendados para esta persona`
-- fortalezas y aspectos por revisar para cada oficio sugerido
-
-## Que NO hace todavia el motor
-
-Aun no usa en el score:
-
-- productividad real
-- seguridad real
-- calidad real
-- antropometria como filtro duro
-- historial completo de multiples evaluaciones
-- experiencia por area como regla obligatoria
-- machine learning
-- redes neuronales
-
-Hoy el motor es:
-
-- explicable
-- basado en reglas
-- ponderado por prueba
-
-## Pantallas del frontend
-
-### `Carga de datos`
-
-- subir Excel
-- ver lote
-- ver issues
-
-### `Trabajadores`
-
-- lista de trabajadores con buscador por nombre, cedula, oficio o area
-- detalle de evaluaciones
-- area del puesto homologado
-- radar esperado vs obtenido para la evaluacion del trabajador cuando el oficio tiene requisitos
-- oficios recomendados para esa persona, ordenados por compatibilidad
-
-### `Oficios`
-
-- catalogo fijo de puestos
-- linea
-- area
-- pruebas requeridas
-- peso mostrado en porcentaje
-
-### `Homologaciones`
-
-- pendientes por resolver
-- homologaciones activas
-- deshacer homologaciones activas para corregir una asociacion
-
-### `Recomendaciones`
-
-- seleccion de oficio
-- ranking de candidatos
-- area y linea del oficio seleccionado
-- radar esperado vs obtenido por candidato
-- lectura ejecutiva de puntos fuertes y aspectos por reforzar
-
-## Endpoints principales
-
-- `POST /api/imports/excel`
-- `GET /api/imports/:id/issues`
-- `GET /api/workers`
-- `GET /api/workers/:id`
-- `GET /api/roles`
-- `POST /api/role-aliases`
-- `DELETE /api/role-aliases/:id`
-- `GET /api/recommendations?roleId=...`
-
-## Tablas principales
-
-- `roles`
-- `role_aliases`
-- `workers`
-- `worker_assessments`
-- `skill_results`
-- `role_requirements`
-- `anthropometric_profiles`
-- `import_batches`
-- `import_issues`
-
-## Archivos clave del proyecto
-
-### Backend
-
-- `api/src/db/fixedRoles.js`
-  - catalogo fijo de puestos
-- `api/src/db/bootstrap.js`
-  - crea esquema y siembra puestos
-- `api/src/services/importService.js`
-  - importacion de Excel
-- `api/src/services/roleService.js`
-  - homologaciones y consulta de roles
-- `api/src/services/workerService.js`
-  - consultas de trabajadores
-- `api/src/services/recommendationService.js`
-  - arma el ranking
-- `api/src/utils/recommendation.js`
-  - scoring y estados
-
-### Frontend
-
-- `web/src/App.jsx`
-  - flujo principal de pantallas
-- `web/src/api.js`
-  - llamadas al backend
+Health check API:
+
+```text
+http://localhost:4000/health
+```
 
 ## Comandos utiles
 
-Inicializar esquema y puestos:
-
-```powershell
-cd api
-npm.cmd run db:init
-```
-
-Probar utilidades basicas del backend:
+Ejecutar pruebas del backend:
 
 ```powershell
 cd api
 npm.cmd test
+```
+
+Validar sintaxis del backend:
+
+```powershell
+cd api
+npm.cmd run check
 ```
 
 Compilar frontend:
@@ -519,4 +205,19 @@ cd web
 npm.cmd run build
 ```
 
+Reiniciar base de datos desde cero:
 
+```powershell
+docker compose down -v
+docker compose up -d
+cd api
+npm.cmd run db:init
+```
+
+## Estado del proyecto
+
+Este repositorio contiene un prototipo academico funcional. El motor actual es explicable y basado en reglas ponderadas. Como siguientes pasos, se podria ampliar el modelo con indicadores reales de productividad, seguridad, calidad, antropometria e historial operativo para avanzar hacia analitica predictiva mas robusta.
+
+## Autor
+
+Desarrollado por **David Sebastian Hurtado Sanchez** como parte del proyecto **Cerebro Digital 2.0** para el Taller de Proyectos Interdisciplinarios.
