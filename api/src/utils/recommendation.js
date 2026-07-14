@@ -11,6 +11,7 @@ const STATUS_RANK = {
   "requiere reentrenamiento": 3,
   "no recomendado": 2,
   "pendiente homologacion": 1,
+  "no cumple perfil": 0,
 };
 
 function clamp(value, min, max) {

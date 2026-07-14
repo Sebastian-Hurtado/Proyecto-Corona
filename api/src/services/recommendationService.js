@@ -96,6 +96,8 @@ async function getRecommendations(roleId) {
         skillMap,
         roleResolved
       );
+      const status =
+        assessment.complies === false ? "no cumple perfil" : scored.status;
 
       return {
         workerId: assessment.worker_id,
@@ -105,8 +107,9 @@ async function getRecommendations(roleId) {
         gender: assessment.gender,
         candidateType: assessment.candidate_type,
         sourceRoleName: assessment.source_role_name,
+        profileComplies: assessment.complies,
         score: scored.score,
-        status: scored.status,
+        status,
         strengths: scored.strengths.map((item) => ({
           label: SKILL_LABELS[item.skillKey] || item.label,
           currentLevelText: item.currentLevelText,

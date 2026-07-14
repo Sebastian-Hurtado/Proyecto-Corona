@@ -1,9 +1,20 @@
-const { query } = require("../db");
+const { query, withTransaction } = require("../db");
+const { levelValueToText } = require("../utils/levels");
+const { calculateManualSkillResult } = require("../utils/manualSkillScoring");
+const { normalizeRoleName, normalizeWhitespace } = require("../utils/normalize");
 const {
   SKILL_LABELS,
   STATUS_RANK,
   scoreWorkerAgainstRole,
 } = require("../utils/recommendation");
+
+const MANUAL_SKILLS = [
+  { key: "batak", sourceLabel: "Batak" },
+  { key: "dedos_sueltos", sourceLabel: "Dedos Sueltos" },
+  { key: "minnesota", sourceLabel: "Minnesota" },
+  { key: "purdue", sourceLabel: "Purdue / Lumosity - Trenes" },
+  { key: "sonda_espacial", sourceLabel: "Sonda Espacial" },
+];
 
 async function listWorkers() {
   const result = await query(
@@ -35,6 +46,307 @@ async function listWorkers() {
   );
 
   return result.rows;
+}
+
+async function createManualWorker(payload) {
+  const manualWorker = normalizeManualWorkerPayload(payload);
+
+  const workerId = await withTransaction(async (client) => {
+    const role = await getRoleForManualWorker(client, manualWorker.roleId);
+    const savedWorkerId = await upsertManualWorker(client, manualWorker);
+    const assessmentId = await insertManualAssessment(client, {
+      workerId: savedWorkerId,
+      role,
+      assessmentDate: manualWorker.assessmentDate,
+      sourceRecordNumber: `MANUAL-${manualWorker.documentNumber}-${Date.now()}`,
+      overallLevelText: manualWorker.overallLevelText,
+      overallLevelValue: manualWorker.overallLevelValue,
+      complies: manualWorker.complies,
+    });
+
+    for (const skill of manualWorker.skills) {
+      await insertManualSkillResult(client, assessmentId, skill);
+    }
+
+    return savedWorkerId;
+  });
+
+  return getWorkerById(workerId);
+}
+
+function normalizeManualWorkerPayload(payload = {}) {
+  const documentNumber = normalizeWhitespace(payload.documentNumber);
+  const fullName = normalizeWhitespace(payload.fullName);
+  const gender = normalizeWhitespace(payload.gender);
+  const dominantHand = normalizeWhitespace(payload.dominantHand);
+  const candidateType = normalizeWhitespace(payload.candidateType);
+  const roleId = Number(payload.roleId);
+
+  if (!documentNumber) {
+    throwValidationError("La cedula es obligatoria.");
+  }
+
+  if (!fullName) {
+    throwValidationError("El nombre es obligatorio.");
+  }
+
+  if (!gender) {
+    throwValidationError("Selecciona el genero.");
+  }
+
+  if (!dominantHand) {
+    throwValidationError("Selecciona la mano dominante.");
+  }
+
+  if (!candidateType) {
+    throwValidationError("El tipo de candidato es obligatorio.");
+  }
+
+  if (!Number.isInteger(roleId) || roleId <= 0) {
+    throwValidationError("Selecciona un oficio.");
+  }
+
+  const skills = MANUAL_SKILLS.map((skill) => {
+    const result = getManualSkillResult(payload, skill.key);
+
+    return {
+      skillKey: skill.key,
+      sourceLabel: skill.sourceLabel,
+      levelValue: result.levelValue,
+      levelText: result.levelText,
+      rawScore: result.rawScore,
+    };
+  });
+
+  const overallLevelValue = getManualOverallLevel(payload, skills);
+  const complies = parseManualComplies(payload.complies ?? payload.profileComplies);
+
+  return {
+    documentNumber,
+    fullName,
+    gender,
+    dominantHand,
+    candidateType,
+    roleId,
+    assessmentDate: normalizeAssessmentDate(payload.assessmentDate),
+    complies: complies ?? true,
+    overallLevelValue,
+    overallLevelText: levelValueToText(overallLevelValue),
+    skills,
+  };
+}
+
+function parseManualComplies(value) {
+  if (value === true) {
+    return true;
+  }
+
+  if (value === false) {
+    return false;
+  }
+
+  const normalized = normalizeWhitespace(value).toUpperCase();
+
+  if (normalized === "SI" || normalized === "SÍ" || normalized === "TRUE" || normalized === "CUMPLE") {
+    return true;
+  }
+
+  if (normalized === "NO" || normalized === "FALSE" || normalized === "NO CUMPLE") {
+    return false;
+  }
+
+  return null;
+}
+
+function getManualSkillResult(payload, skillKey) {
+  const legacyLevelValue = getManualSkillLevel(payload, skillKey);
+
+  if (legacyLevelValue) {
+    return {
+      levelValue: legacyLevelValue,
+      levelText: levelValueToText(legacyLevelValue),
+      rawScore: levelValueToText(legacyLevelValue),
+    };
+  }
+
+  try {
+    return calculateManualSkillResult(skillKey, payload.skillInputs?.[skillKey]);
+  } catch (error) {
+    throwValidationError("Completa los resultados numericos de las pruebas.");
+  }
+}
+
+function getManualSkillLevel(payload, skillKey) {
+  const fromObject = payload.skills?.[skillKey];
+  const fromList = Array.isArray(payload.skillResults)
+    ? payload.skillResults.find((item) => item.skillKey === skillKey)?.levelValue
+    : null;
+
+  return parseLevelValue(fromObject ?? fromList);
+}
+
+function getManualOverallLevel(payload, skills) {
+  const providedLevel = parseLevelValue(payload.overallLevel ?? payload.overallLevelValue);
+
+  if (providedLevel) {
+    return providedLevel;
+  }
+
+  const total = skills.reduce((sum, skill) => sum + skill.levelValue, 0);
+  return Math.round(total / skills.length);
+}
+
+function parseLevelValue(value) {
+  const numericValue = Number(value);
+
+  if (!Number.isInteger(numericValue) || numericValue < 1 || numericValue > 5) {
+    return null;
+  }
+
+  return numericValue;
+}
+
+function normalizeAssessmentDate(value) {
+  const dateText = normalizeWhitespace(value);
+
+  if (!dateText) {
+    throwValidationError("La fecha de evaluacion es obligatoria.");
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
+    throwValidationError("La fecha de evaluacion no es valida.");
+  }
+
+  return dateText;
+}
+
+async function getRoleForManualWorker(client, roleId) {
+  const result = await client.query(
+    `
+      SELECT id, role_name, normalized_name, line_name
+      FROM roles
+      WHERE id = $1
+    `,
+    [roleId]
+  );
+
+  const role = result.rows[0];
+
+  if (!role) {
+    throwValidationError("Selecciona un oficio.");
+  }
+
+  return role;
+}
+
+async function upsertManualWorker(client, worker) {
+  const result = await client.query(
+    `
+      INSERT INTO workers (
+        document_number,
+        first_name,
+        last_name,
+        full_name,
+        gender,
+        dominant_hand,
+        candidate_type
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (document_number)
+      DO UPDATE SET
+        first_name = EXCLUDED.first_name,
+        last_name = EXCLUDED.last_name,
+        full_name = EXCLUDED.full_name,
+        gender = EXCLUDED.gender,
+        dominant_hand = EXCLUDED.dominant_hand,
+        candidate_type = EXCLUDED.candidate_type,
+        updated_at = NOW()
+      RETURNING id
+    `,
+    [
+      worker.documentNumber,
+      worker.fullName,
+      null,
+      worker.fullName,
+      worker.gender,
+      worker.dominantHand,
+      worker.candidateType,
+    ]
+  );
+
+  return result.rows[0].id;
+}
+
+async function insertManualAssessment(client, assessment) {
+  const normalizedRoleName =
+    assessment.role.normalized_name || normalizeRoleName(assessment.role.role_name);
+
+  const result = await client.query(
+    `
+      INSERT INTO worker_assessments (
+        worker_id,
+        role_id,
+        source_role_name,
+        normalized_source_role_name,
+        line_name,
+        source_record_number,
+        assessment_date,
+        raw_assessment_date,
+        overall_level_text,
+        overall_level_value,
+        final_score,
+        complies
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING id
+    `,
+    [
+      assessment.workerId,
+      assessment.role.id,
+      assessment.role.role_name,
+      normalizedRoleName,
+      assessment.role.line_name,
+      assessment.sourceRecordNumber,
+      assessment.assessmentDate,
+      assessment.assessmentDate,
+      assessment.overallLevelText,
+      assessment.overallLevelValue,
+      null,
+      assessment.complies,
+    ]
+  );
+
+  return result.rows[0].id;
+}
+
+async function insertManualSkillResult(client, assessmentId, skill) {
+  await client.query(
+    `
+      INSERT INTO skill_results (
+        assessment_id,
+        skill_key,
+        source_label,
+        level_text,
+        level_value,
+        raw_score
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `,
+    [
+      assessmentId,
+      skill.skillKey,
+      skill.sourceLabel,
+      skill.levelText,
+      skill.levelValue,
+      skill.rawScore || skill.levelText,
+    ]
+  );
+}
+
+function throwValidationError(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  throw error;
 }
 
 async function getWorkerById(workerId) {
@@ -124,7 +436,7 @@ async function getWorkerById(workerId) {
   const latestAssessment = assessmentsResult.rows[0];
   const roleMatches = latestAssessment
     ? await getWorkerRoleMatches(
-        latestAssessment.id,
+        latestAssessment,
         skillMapsByAssessment.get(latestAssessment.id) || {}
       )
     : [];
@@ -239,7 +551,7 @@ async function getAssessmentRoleComparisons(assessments, skillMapsByAssessment) 
   return comparisonsByAssessment;
 }
 
-async function getWorkerRoleMatches(assessmentId, skillMap) {
+async function getWorkerRoleMatches(assessment, skillMap) {
   const rolesResult = await query(
     `
       SELECT
@@ -288,15 +600,18 @@ async function getWorkerRoleMatches(assessmentId, skillMap) {
     .map((role) => {
       const requirements = requirementsByRole.get(role.id) || [];
       const scored = scoreWorkerAgainstRole(requirements, skillMap, requirements.length > 0);
+      const status =
+        assessment.complies === false ? "no cumple perfil" : scored.status;
 
       return {
         roleId: role.id,
-        assessmentId,
+        assessmentId: assessment.id,
         roleName: role.role_name,
         areaName: role.area_name,
         lineName: role.line_name,
+        profileComplies: assessment.complies,
         score: scored.score,
-        status: scored.status,
+        status,
         requirementCount: requirements.length,
         strengths: scored.strengths.map((item) => ({
           label: SKILL_LABELS[item.skillKey] || item.label,
@@ -334,6 +649,7 @@ async function getWorkerRoleMatches(assessmentId, skillMap) {
 }
 
 module.exports = {
+  createManualWorker,
   listWorkers,
   getWorkerById,
 };

@@ -1,8 +1,13 @@
 const express = require("express");
-const { getWorkers, getWorker } = require("../controllers/workersController");
+const {
+  postManualWorker,
+  getWorkers,
+  getWorker,
+} = require("../controllers/workersController");
 
 const router = express.Router();
 
+router.post("/manual", postManualWorker);
 router.get("/", getWorkers);
 router.get("/:id", getWorker);
 

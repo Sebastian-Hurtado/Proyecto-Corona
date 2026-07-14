@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  createManualWorker,
   createRoleAlias,
   deleteRoleAlias,
   getImportIssues,
@@ -12,13 +13,118 @@ import {
 
 const TABS = [
   "Carga de datos",
-  "Trabajadores",
+  "Colaboradores",
   "Oficios",
   "Homologaciones",
   "Recomendaciones",
 ];
 
 const RADAR_LEVELS = [1, 2, 3, 4, 5];
+
+const MANUAL_SKILL_INPUT_GROUPS = [
+  {
+    key: "minnesota",
+    label: "Minnesota",
+    note: "Captura las rondas; el sistema calcula la suma total de cada bloque.",
+    matrix: {
+      rowHeader: "Bloque",
+      columns: [
+        { suffix: "Round1", label: "Ronda 1" },
+        { suffix: "Round2", label: "Ronda 2" },
+      ],
+      rows: [
+        { prefix: "placingDominant", label: "Colocacion dominante" },
+        { prefix: "placingNonDominant", label: "Colocacion no dominante" },
+        { prefix: "displacingDominant", label: "Desplazamiento dominante" },
+        { prefix: "displacingNonDominant", label: "Desplazamiento no dominante" },
+        { prefix: "rotation", label: "Rotacion" },
+      ],
+    },
+    fields: [
+      { key: "placingDominantRound1", label: "Colocacion dominante - Ronda 1" },
+      { key: "placingDominantRound2", label: "Colocacion dominante - Ronda 2" },
+      { key: "placingNonDominantRound1", label: "Colocacion no dominante - Ronda 1" },
+      { key: "placingNonDominantRound2", label: "Colocacion no dominante - Ronda 2" },
+      { key: "displacingDominantRound1", label: "Desplazamiento dominante - Ronda 1" },
+      { key: "displacingDominantRound2", label: "Desplazamiento dominante - Ronda 2" },
+      {
+        key: "displacingNonDominantRound1",
+        label: "Desplazamiento no dominante - Ronda 1",
+      },
+      {
+        key: "displacingNonDominantRound2",
+        label: "Desplazamiento no dominante - Ronda 2",
+      },
+      { key: "rotationRound1", label: "Rotacion - Ronda 1" },
+      { key: "rotationRound2", label: "Rotacion - Ronda 2" },
+    ],
+  },
+  {
+    key: "purdue",
+    label: "Purdue / Lumosity - Trenes",
+    note: "Captura las rondas; el sistema calcula el promedio de cada bloque.",
+    matrix: {
+      rowHeader: "Bloque",
+      columns: [
+        { suffix: "Round1", label: "Ronda 1" },
+        { suffix: "Round2", label: "Ronda 2" },
+      ],
+      rows: [
+        { prefix: "rightHand", label: "Mano dominante" },
+        { prefix: "leftHand", label: "Mano no dominante" },
+        { prefix: "bothHands", label: "Ambas manos" },
+        { prefix: "assembly", label: "Ensamble" },
+      ],
+    },
+    fields: [
+      { key: "rightHandRound1", label: "Mano dominante - Ronda 1" },
+      { key: "rightHandRound2", label: "Mano dominante - Ronda 2" },
+      { key: "leftHandRound1", label: "Mano no dominante - Ronda 1" },
+      { key: "leftHandRound2", label: "Mano no dominante - Ronda 2" },
+      { key: "bothHandsRound1", label: "Ambas manos - Ronda 1" },
+      { key: "bothHandsRound2", label: "Ambas manos - Ronda 2" },
+      { key: "assemblyRound1", label: "Ensamble - Ronda 1" },
+      { key: "assemblyRound2", label: "Ensamble - Ronda 2" },
+    ],
+  },
+  {
+    key: "batak",
+    label: "Batak",
+    note: "Captura practica y rondas; el sistema calcula la puntuacion con el mayor valor.",
+    fields: [
+      { key: "practice", label: "Practica" },
+      { key: "round1", label: "Ronda 1" },
+      { key: "round2", label: "Ronda 2" },
+    ],
+  },
+  {
+    key: "dedos_sueltos",
+    label: "Dedos Sueltos",
+    note: "Captura si logra la meta y la puntuacion final de la prueba.",
+    fields: [
+      {
+        key: "goalMet",
+        label: "Logra la meta",
+        type: "select",
+        options: ["SI", "NO"],
+      },
+      { key: "score", label: "Puntuacion" },
+    ],
+  },
+  {
+    key: "sonda_espacial",
+    label: "Sonda Espacial",
+    note: "Captura practica y cinco rondas; el sistema calcula la puntuacion con la moda.",
+    fields: [
+      { key: "practice", label: "Practica" },
+      { key: "round1", label: "Ronda 1" },
+      { key: "round2", label: "Ronda 2" },
+      { key: "round3", label: "Ronda 3" },
+      { key: "round4", label: "Ronda 4" },
+      { key: "round5", label: "Ronda 5" },
+    ],
+  },
+];
 
 function App() {
   const [activeTab, setActiveTab] = useState(TABS[0]);
@@ -30,6 +136,10 @@ function App() {
   const [workers, setWorkers] = useState([]);
   const [workerDetail, setWorkerDetail] = useState(null);
   const [workerSearch, setWorkerSearch] = useState("");
+  const [isManualWorkerFormOpen, setIsManualWorkerFormOpen] = useState(false);
+  const [manualWorkerForm, setManualWorkerForm] = useState(() =>
+    createEmptyManualWorkerForm()
+  );
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [recommendationData, setRecommendationData] = useState(null);
   const [aliasSelections, setAliasSelections] = useState({});
@@ -139,6 +249,80 @@ function App() {
     }
   }
 
+  function handleOpenManualWorkerForm() {
+    setError("");
+    setMessage("");
+    setManualWorkerForm(createEmptyManualWorkerForm());
+    setIsManualWorkerFormOpen(true);
+  }
+
+  function handleManualWorkerField(field, value) {
+    if (error) {
+      setError("");
+    }
+
+    setManualWorkerForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function handleManualWorkerSkillInput(skillKey, fieldKey, value) {
+    if (error) {
+      setError("");
+    }
+
+    setManualWorkerForm((current) => ({
+      ...current,
+      skillInputs: {
+        ...current.skillInputs,
+        [skillKey]: {
+          ...current.skillInputs[skillKey],
+          [fieldKey]: value,
+        },
+      },
+    }));
+  }
+
+  async function handleManualWorkerSubmit(event) {
+    event.preventDefault();
+
+    const validationMessage = validateManualWorkerForm(manualWorkerForm);
+    if (validationMessage) {
+      setError(validationMessage);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const worker = await createManualWorker({
+        documentNumber: manualWorkerForm.documentNumber,
+        fullName: manualWorkerForm.fullName,
+        gender: manualWorkerForm.gender,
+        dominantHand: manualWorkerForm.dominantHand,
+        candidateType: manualWorkerForm.candidateType,
+        roleId: Number(manualWorkerForm.roleId),
+        assessmentDate: manualWorkerForm.assessmentDate,
+        complies: manualWorkerForm.complies === true,
+        skillInputs: manualWorkerForm.skillInputs,
+      });
+
+      await refreshBaseData();
+      setWorkerDetail(worker);
+      setWorkerSearch(worker.document_number);
+      setIsManualWorkerFormOpen(false);
+      setManualWorkerForm(createEmptyManualWorkerForm());
+      setMessage("Colaborador guardado correctamente.");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleAlias(sourceName) {
     const roleId = aliasSelections[sourceName];
     if (!roleId) return;
@@ -198,7 +382,7 @@ function App() {
         </div>
         <div className="hero-metrics">
           <Metric label="Oficios" value={rolesData.roles.length} />
-          <Metric label="Trabajadores" value={workers.length} />
+          <Metric label="Colaboradores" value={workers.length} />
           <Metric
             label="Pendientes"
             value={rolesData.unresolvedSources.length}
@@ -226,6 +410,22 @@ function App() {
           {message && <span className="status-chip success">{message}</span>}
           {error && <span className="status-chip danger">{error}</span>}
         </section>
+      )}
+
+      {isManualWorkerFormOpen && (
+        <ManualWorkerDialog
+          form={manualWorkerForm}
+          roles={rolesData.roles}
+          loading={loading}
+          error={error}
+          onClose={() => {
+            setIsManualWorkerFormOpen(false);
+            setError("");
+          }}
+          onFieldChange={handleManualWorkerField}
+          onSkillInputChange={handleManualWorkerSkillInput}
+          onSubmit={handleManualWorkerSubmit}
+        />
       )}
 
       {activeTab === "Carga de datos" && (
@@ -278,11 +478,23 @@ function App() {
         </section>
       )}
 
-      {activeTab === "Trabajadores" && (
+      {activeTab === "Colaboradores" && (
         <section className="grid two-columns">
-          <Panel title="Listado de trabajadores" subtitle="Vista rapida de la ultima evaluacion disponible.">
+          <Panel
+            title="Listado de colaboradores"
+            subtitle="Vista rapida de la ultima evaluacion disponible."
+            actions={
+              <button
+                className="primary-action"
+                type="button"
+                onClick={handleOpenManualWorkerForm}
+              >
+                Ingresar colaborador
+              </button>
+            }
+          >
             <div className="search-field">
-              <label htmlFor="worker-search">Buscar trabajador</label>
+              <label htmlFor="worker-search">Buscar colaborador</label>
               <input
                 id="worker-search"
                 type="search"
@@ -294,7 +506,7 @@ function App() {
 
             <div className="stack-list">
               {filteredWorkers.length === 0 && (
-                <EmptyState text="No hay trabajadores que coincidan con la busqueda." compact />
+                <EmptyState text="No hay colaboradores que coincidan con la busqueda." compact />
               )}
               {filteredWorkers.map((worker) => (
                 <button
@@ -319,8 +531,8 @@ function App() {
             </div>
           </Panel>
 
-          <Panel title="Detalle del trabajador" subtitle="Resultados por prueba y oficio asociado.">
-            {!workerDetail && <EmptyState text="Selecciona un trabajador para ver el detalle." />}
+          <Panel title="Detalle del colaborador" subtitle="Resultados por prueba y oficio asociado.">
+            {!workerDetail && <EmptyState text="Selecciona un colaborador para ver el detalle." />}
             {workerDetail && (
               <div className="detail-column">
                 <div className="detail-header">
@@ -333,8 +545,8 @@ function App() {
                   <article key={assessment.id} className="detail-card">
                     <div className="issue-topline">
                       <strong>{assessment.matched_role_name || assessment.source_role_name}</strong>
-                      <Badge tone={assessment.complies ? "success" : "warning"}>
-                        {assessment.complies ? "Cumple" : "No cumple"}
+                      <Badge tone={complianceTone(assessment.complies)}>
+                        {complianceLabel(assessment.complies)}
                       </Badge>
                     </div>
                     <p>Area: {assessment.matched_area_name || "Sin area"}</p>
@@ -540,12 +752,15 @@ function App() {
   );
 }
 
-function Panel({ title, subtitle, children }) {
+function Panel({ title, subtitle, actions, children }) {
   return (
     <section className="panel">
       <div className="panel-header">
-        <h2>{title}</h2>
-        <p>{subtitle}</p>
+        <div>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
+        </div>
+        {actions && <div className="panel-actions">{actions}</div>}
       </div>
       {children}
     </section>
@@ -569,6 +784,300 @@ function EmptyState({ text, compact = false }) {
   return <div className={compact ? "empty compact" : "empty"}>{text}</div>;
 }
 
+function ManualSkillMatrix({ skill, values, onChange }) {
+  return (
+    <div
+      className="manual-skill-matrix"
+      style={{
+        "--round-columns": skill.matrix.columns.length,
+      }}
+    >
+      <div className="manual-skill-matrix-heading">
+        <span>{skill.matrix.rowHeader}</span>
+        {skill.matrix.columns.map((column) => (
+          <span key={column.suffix}>{column.label}</span>
+        ))}
+      </div>
+
+      {skill.matrix.rows.map((row) => (
+        <div key={row.prefix} className="manual-skill-matrix-row">
+          <strong>{row.label}</strong>
+          {skill.matrix.columns.map((column) => {
+            const fieldKey = `${row.prefix}${column.suffix}`;
+            return (
+              <input
+                key={fieldKey}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                value={values[fieldKey]}
+                onChange={(event) =>
+                  onChange(skill.key, fieldKey, event.target.value)
+                }
+                placeholder={column.label}
+                aria-label={`${row.label} - ${column.label}`}
+                required
+              />
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ManualSkillInput({ field, value, onChange }) {
+  return (
+    <label className="form-field">
+      <span>{field.label}</span>
+      {field.type === "select" ? (
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          required
+        >
+          <option value="">Selecciona</option>
+          {field.options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          inputMode="decimal"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Resultado"
+          required
+        />
+      )}
+    </label>
+  );
+}
+
+function ManualWorkerDialog({
+  form,
+  roles,
+  loading,
+  error,
+  onClose,
+  onFieldChange,
+  onSkillInputChange,
+  onSubmit,
+}) {
+  return (
+    <div className="modal-backdrop">
+      <section
+        className="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="manual-worker-title"
+      >
+        <div className="modal-topline">
+          <div>
+            <h2 id="manual-worker-title">Ingresar colaborador</h2>
+            <p>Registra la persona y su evaluacion para usarla en recomendaciones.</p>
+          </div>
+          <button
+            className="secondary-action"
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cerrar
+          </button>
+        </div>
+
+        {error && <div className="form-alert">{error}</div>}
+
+        <form className="manual-worker-form" onSubmit={onSubmit} noValidate>
+          <div className="form-grid">
+            <label className="form-field">
+              <span>Cedula</span>
+              <input
+                type="text"
+                value={form.documentNumber}
+                onChange={(event) =>
+                  onFieldChange("documentNumber", event.target.value)
+                }
+                placeholder="Ej. 1020304050"
+                required
+              />
+            </label>
+
+            <label className="form-field">
+              <span>Nombre completo</span>
+              <input
+                type="text"
+                value={form.fullName}
+                onChange={(event) => onFieldChange("fullName", event.target.value)}
+                placeholder="Ej. Ana Maria Perez"
+                required
+              />
+            </label>
+
+            <label className="form-field">
+              <span>Genero</span>
+              <select
+                value={form.gender}
+                onChange={(event) => onFieldChange("gender", event.target.value)}
+                required
+              >
+                <option value="">Selecciona genero</option>
+                <option value="FEMENINO">FEMENINO</option>
+                <option value="MASCULINO">MASCULINO</option>
+                <option value="OTRO">OTRO</option>
+              </select>
+            </label>
+
+            <label className="form-field">
+              <span>Mano dominante</span>
+              <select
+                value={form.dominantHand}
+                onChange={(event) =>
+                  onFieldChange("dominantHand", event.target.value)
+                }
+                required
+              >
+                <option value="">Selecciona mano dominante</option>
+                <option value="DERECHA">DERECHA</option>
+                <option value="IZQUIERDA">IZQUIERDA</option>
+                <option value="AMBIDIESTRO">AMBIDIESTRO</option>
+              </select>
+            </label>
+
+            <label className="form-field">
+              <span>Tipo de candidato</span>
+              <input
+                type="text"
+                value={form.candidateType}
+                onChange={(event) =>
+                  onFieldChange("candidateType", event.target.value)
+                }
+                placeholder="Interno, externo, aprendiz..."
+                required
+              />
+            </label>
+
+            <label className="form-field">
+              <span>Fecha de evaluacion</span>
+              <input
+                type="date"
+                value={form.assessmentDate}
+                onChange={(event) =>
+                  onFieldChange("assessmentDate", event.target.value)
+                }
+                required
+              />
+            </label>
+          </div>
+
+          <div className="form-section-heading">
+            <h3>Evaluacion</h3>
+          </div>
+
+          <div className="form-grid">
+            <label className="form-field wide">
+              <span>Oficio evaluado</span>
+              <select
+                value={form.roleId}
+                onChange={(event) => onFieldChange("roleId", event.target.value)}
+                required
+              >
+                <option value="">Selecciona un oficio</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.area_name || "Sin area"} - {role.role_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label
+              className={`checkbox-field wide ${
+                form.complies === true ? "is-positive" : "is-negative"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={form.complies === true}
+                onChange={(event) =>
+                  onFieldChange("complies", event.target.checked)
+                }
+              />
+              <span>
+                {form.complies === true
+                  ? "Cumple perfil antropometrico"
+                  : "No cumple perfil antropometrico"}
+              </span>
+              <small>
+                {form.complies === true
+                  ? "Se tendra en cuenta para recomendaciones segun sus pruebas."
+                  : "No se recomendara para oficios aunque sus pruebas sean favorables."}
+              </small>
+            </label>
+          </div>
+
+          <div className="form-section-heading">
+            <h3>Resultados por prueba</h3>
+            <p>El sistema calcula la calificacion automaticamente con los rangos del Excel.</p>
+          </div>
+
+          <div className="manual-skill-groups">
+            {MANUAL_SKILL_INPUT_GROUPS.map((skill) => (
+              <section key={skill.key} className="manual-skill-card">
+                <div className="manual-skill-header">
+                  <h4>{skill.label}</h4>
+                  <p>{skill.note}</p>
+                </div>
+                {skill.matrix ? (
+                  <ManualSkillMatrix
+                    skill={skill}
+                    values={form.skillInputs[skill.key]}
+                    onChange={onSkillInputChange}
+                  />
+                ) : (
+                  <div className="skill-level-grid">
+                    {skill.fields.map((field) => (
+                      <ManualSkillInput
+                        key={field.key}
+                        field={field}
+                        value={form.skillInputs[skill.key][field.key]}
+                        onChange={(value) =>
+                          onSkillInputChange(skill.key, field.key, value)
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+
+          <div className="form-actions">
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+            >
+              Cancelar
+            </button>
+            <button className="primary-action" type="submit" disabled={loading}>
+              Guardar colaborador
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function RoleFitSummary({ matches }) {
   const visibleMatches = matches.slice(0, 5);
 
@@ -577,7 +1086,7 @@ function RoleFitSummary({ matches }) {
       <div className="role-fit-header">
         <h3>Oficios recomendados para esta persona</h3>
         <p>
-          Comparacion de la evaluacion mas reciente del trabajador contra los
+          Comparacion de la evaluacion mas reciente del colaborador contra los
           requisitos de cada oficio homologado.
         </p>
       </div>
@@ -817,15 +1326,96 @@ function RadarChart({ comparisons }) {
   );
 }
 
+function createEmptyManualWorkerForm() {
+  return {
+    documentNumber: "",
+    fullName: "",
+    gender: "",
+    dominantHand: "",
+    candidateType: "",
+    roleId: "",
+    assessmentDate: todayInputDate(),
+    complies: true,
+    skillInputs: Object.fromEntries(
+      MANUAL_SKILL_INPUT_GROUPS.map((skill) => [
+        skill.key,
+        Object.fromEntries(skill.fields.map((field) => [field.key, ""])),
+      ])
+    ),
+  };
+}
+
+function todayInputDate() {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 10);
+}
+
+function validateManualWorkerForm(form) {
+  if (!form.documentNumber.trim()) {
+    return "La cedula es obligatoria.";
+  }
+
+  if (!form.fullName.trim()) {
+    return "El nombre es obligatorio.";
+  }
+
+  if (!form.gender) {
+    return "Selecciona el genero.";
+  }
+
+  if (!form.dominantHand) {
+    return "Selecciona la mano dominante.";
+  }
+
+  if (!form.candidateType.trim()) {
+    return "El tipo de candidato es obligatorio.";
+  }
+
+  if (!form.assessmentDate) {
+    return "La fecha de evaluacion es obligatoria.";
+  }
+
+  if (!form.roleId) {
+    return "Selecciona un oficio.";
+  }
+
+  for (const skill of MANUAL_SKILL_INPUT_GROUPS) {
+    for (const field of skill.fields) {
+      const value = form.skillInputs[skill.key]?.[field.key];
+
+      if (!String(value ?? "").trim()) {
+        return `Completa ${field.label} en ${skill.label}.`;
+      }
+    }
+  }
+
+  return "";
+}
+
+function complianceTone(complies) {
+  if (complies === true) return "success";
+  if (complies === false) return "warning";
+  return "info";
+}
+
+function complianceLabel(complies) {
+  if (complies === true) return "Cumple";
+  if (complies === false) return "No cumple";
+  return "Pendiente";
+}
+
 function statusTone(status) {
   if (status === "apto") return "success";
   if (status === "requiere reentrenamiento") return "warning";
   if (status === "pendiente homologacion") return "info";
+  if (status === "no cumple perfil") return "danger";
   return "danger";
 }
 
 function recommendationStatusLabel(status) {
   if (status === "requiere reentrenamiento") return "requiere entrenamiento";
+  if (status === "no cumple perfil") return "no cumple perfil";
   return status;
 }
 
@@ -833,6 +1423,7 @@ function readableStatus(status) {
   if (status === "apto") return "Apto";
   if (status === "requiere reentrenamiento") return "Requiere refuerzo";
   if (status === "pendiente homologacion") return "Pendiente";
+  if (status === "no cumple perfil") return "No cumple perfil";
   return "No recomendado";
 }
 
@@ -847,6 +1438,10 @@ function roleFitNote(status) {
 
   if (status === "pendiente homologacion") {
     return "Faltan requisitos homologados para comparar este oficio con confianza.";
+  }
+
+  if (status === "no cumple perfil") {
+    return "No se recomienda asignar a este oficio porque no cumple el perfil antropometrico.";
   }
 
   return "No es la mejor opcion para este oficio segun la evaluacion actual.";

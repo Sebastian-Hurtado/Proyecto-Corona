@@ -25,6 +25,18 @@ export async function getWorker(workerId) {
   return parseResponse(response);
 }
 
+export async function createManualWorker(payload) {
+  const response = await fetch(`${API_URL}/workers/manual`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseResponse(response);
+}
+
 export async function getRecommendations(roleId) {
   const response = await fetch(`${API_URL}/recommendations?roleId=${roleId}`);
   return parseResponse(response);

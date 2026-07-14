@@ -1,4 +1,8 @@
-const { listWorkers, getWorkerById } = require("../services/workerService");
+const {
+  createManualWorker,
+  listWorkers,
+  getWorkerById,
+} = require("../services/workerService");
 
 async function getWorkers(req, res, next) {
   try {
@@ -24,7 +28,17 @@ async function getWorker(req, res, next) {
   }
 }
 
+async function postManualWorker(req, res, next) {
+  try {
+    const worker = await createManualWorker(req.body);
+    res.status(201).json(worker);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  postManualWorker,
   getWorkers,
   getWorker,
 };
