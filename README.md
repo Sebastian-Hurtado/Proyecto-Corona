@@ -21,9 +21,6 @@ El prototipo fue desarrollado como una herramienta funcional para el piloto `One
 - **Buscador de trabajadores** por nombre, cedula, oficio o area.
 - **Interfaz corporativa** alineada visualmente con el contexto de Corona.
 
-## Mi aporte
-
-Mi aporte fue desarrollar y mejorar el aplicativo, integrando funciones para cargar datos, homologar cargos, recomendar candidatos por oficio y sugerir posibles puestos para cada colaborador mediante comparaciones visuales y criterios basados en pruebas. Tambien trabaje en la experiencia de usuario, la documentacion tecnica y la presentacion del proyecto como herramienta funcional.
 
 ## Stack tecnico
 
